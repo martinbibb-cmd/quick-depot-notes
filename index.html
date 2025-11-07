@@ -6,61 +6,89 @@
 <title>Quick Depot Notes</title>
 <style>
 :root {
-  --bg:#f7f8fa; --fg:#0f172a; --card:#fff; --accent:#0284c7;
-  --border:#d1d5db; --pad:12px;
+  --bg:#0f172a;
+  --fg:#e2e8f0;
+  --card:#1f2937;
+  --accent:#38bdf8;
+  --border:#334155;
+  --pad:12px;
 }
+* { box-sizing:border-box; }
 body {
   font-family:-apple-system,system-ui,BlinkMacSystemFont,"Segoe UI",sans-serif;
-  background:var(--bg); color:var(--fg); margin:0; padding:0;
+  background:var(--bg);
+  color:var(--fg);
+  margin:0;
 }
 header {
-  text-align:center; padding:1rem; background:var(--accent); color:white;
-  font-size:1.2rem; font-weight:600;
+  text-align:center; padding:1rem; background:#020617; color:white;
+  font-size:1.1rem; font-weight:600;
 }
-main { display:flex; flex-direction:column; align-items:center; padding:1rem; }
+main { display:flex; flex-direction:column; align-items:center; gap:1rem; padding:1rem; }
 .grid {
-  display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
-  gap:10px; width:100%; max-width:700px;
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
+  gap:10px; width:100%; max-width:900px;
 }
 .tile {
   background:var(--card); border:1px solid var(--border); border-radius:12px;
   padding:var(--pad); text-align:center; font-weight:500; cursor:pointer;
-  box-shadow:0 1px 3px rgba(0,0,0,0.05);
+  box-shadow:0 1px 3px rgba(0,0,0,0.25);
   transition:all .15s ease;
 }
-.tile.selected { border-color:var(--accent); background:#e0f2fe; }
+.tile.selected { border-color:var(--accent); background:rgba(56,189,248,0.12); }
 #modal {
   position:fixed; inset:0; background:rgba(0,0,0,0.45);
   display:none; align-items:center; justify-content:center; z-index:100;
 }
 #modalContent {
-  background:var(--card); border-radius:14px; width:90%; max-width:400px;
-  padding:1rem;
+  background:var(--card); border-radius:14px; width:92%; max-width:420px;
+  padding:1rem; max-height:80vh; overflow-y:auto;
 }
 #modalContent h2 { margin-top:0; }
 .option {
-  border:1px solid var(--border); border-radius:10px; padding:.6rem;
-  margin:.4rem 0; cursor:pointer; text-align:center;
+  border:1px solid var(--border); border-radius:10px; padding:.6rem .75rem;
+  margin:.35rem 0; cursor:pointer;
 }
-.option:hover { background:#f1f5f9; }
-#summaryBox {
+.option:hover { background:rgba(148,163,184,0.09); }
+.option.selected {
+  border-color:var(--accent);
+  background:rgba(56,189,248,0.18);
+}
+#summaryRow {
+  display:flex; flex-wrap:wrap; gap:1rem; width:100%; max-width:900px;
+}
+.box {
+  flex:1 1 300px;
   background:var(--card); border:1px solid var(--border);
-  border-radius:12px; padding:1rem; width:100%; max-width:700px;
-  margin-top:1rem; white-space:pre-wrap;
+  border-radius:12px; padding:1rem; white-space:pre-wrap; min-height:140px;
 }
+h3 { margin-top:0; }
 button {
-  background:var(--accent); color:white; border:none; border-radius:8px;
-  padding:.8rem 1.2rem; font-size:1rem; cursor:pointer; margin-top:1rem;
+  background:var(--accent); color:#020617; border:none; border-radius:8px;
+  padding:.6rem 1.2rem; font-size:.95rem; cursor:pointer; margin-top:.25rem;
+  font-weight:600;
 }
 button:hover { opacity:.9; }
+.small { font-size:.7rem; opacity:.7; }
 </style>
 </head>
 <body>
-<header>Quick Depot Notes</header>
+<header>Quick Depot Notes — fast capture</header>
 <main>
   <div class="grid" id="tiles"></div>
-  <div id="summaryBox">Start selecting notes to build your summary…</div>
-  <button onclick="generateSummary()">Generate Summary</button>
+
+  <div id="summaryRow">
+    <div class="box" id="engineerBox">
+      <h3>Installer / Office notes</h3>
+      <div id="engineerText">Start selecting notes…</div>
+    </div>
+    <div class="box" id="customerBox">
+      <h3>Customer acknowledgements</h3>
+      <div id="customerText">Customer info will appear here…</div>
+    </div>
+  </div>
+  <button onclick="generateSummaries()">Refresh summaries</button>
+  <div class="small">Selections auto-add standard arse-covers where relevant.</div>
 </main>
 
 <div id="modal">
@@ -71,30 +99,131 @@ button:hover { opacity:.9; }
 </div>
 
 <script>
+// --- SECTION DEFINITIONS ---
+// each option can optionally carry tags we use for auto covers
 const sections = {
-  "Needs":["Better water pressure","Faster hot water","More space","Lower running costs"],
-  "Working at heights":["Ladder access","Scaffold – tower","Scaffold – bridging","Roof permit required"],
-  "System characteristics":["Regular","System","Combi","Mixergy","Heat pump-ready"],
-  "Components that require assistance":["Cylinder","Flue","Controls","Gas run"],
-  "Restrictions to work":["Limited access","Customer objects","Time restrictions","Pets/children"],
-  "External hazards":["Uneven ground","Vehicles","Public access","Weather exposure"],
-  "Delivery notes":["Standard delivery","Tight access","Customer to move items"],
-  "Office notes":["Electrical check needed","Permit required","Quote variation"],
-  "New boiler and controls":["Combi","System","Regular","Mixergy"],
-  "Flue":["Rear","Side","Vertical","Reroute required"],
-  "Pipe work":["Minor reroute","Major reroute","Condensate","Gas run"],
-  "Disruption":["Minimal","Moderate","High – kitchen/bathroom"],
-  "Customer actions":["Customer informed about making good","Customer aware of downtime","Customer supplied fittings"]
+  "Needs":[
+    {label:"Better water pressure", tags:["need-pressure"]},
+    {label:"Faster hot water delivery", tags:["need-hw-speed"]},
+    {label:"More usable space", tags:["need-space"]},
+    {label:"Lower running costs", tags:["need-efficiency"]},
+    {label:"Quieter operation", tags:[]},
+    {label:"Easier controls", tags:[]},
+    {label:"Future-ready / renewables", tags:["need-future"]},
+    {label:"Improve water quality / sludge", tags:["pf-offered"]}
+  ],
+  "Working at heights":[
+    {label:"Ladders", tags:["wah-ladder"]},
+    {label:"Steps", tags:["wah-steps"]},
+    {label:"Loft access", tags:["wah-loft"]},
+    {label:"Tower", tags:["wah-tower"]},
+    {label:"Cantilever", tags:["wah-cantilever"]},
+    {label:"Edge protection", tags:["wah-edge"]},
+    {label:"Bridging tower", tags:["wah-bridge"]},
+    {label:"Internal scaffold", tags:["wah-int-scaf"]}
+  ],
+  "System characteristics":[
+    {label:"Existing: Regular (open vent) + vented cyl", tags:["ex-ov","ex-cylinder"]},
+    {label:"Existing: System + unvented cyl", tags:["ex-system","ex-unvented"]},
+    {label:"Existing: Combi", tags:["ex-combi"]},
+    {label:"Existing: Thermal store / Boilermate", tags:["ex-store"]},
+    {label:"Proposed: Combi", tags:["new-combi"]},
+    {label:"Proposed: System + unvented", tags:["new-unvented"]},
+    {label:"Proposed: Regular + vented", tags:["new-vented"]},
+    {label:"Proposed: Mixergy (vented)", tags:["new-mixergy"]},
+    {label:"Proposed: Mixergy (unvented)", tags:["new-mixergy-unv"]},
+    {label:"System to be sealed from open vent", tags:["seal-risk"]}
+  ],
+  "Flue":[
+    {label:"Existing: rear, new: rear — make good minimal", tags:["flue-like"]},
+    {label:"Existing: rear, new: side — brick up / make good", tags:["flue-change","make-good"]},
+    {label:"New vertical through roof", tags:["flue-vertical","make-good"]},
+    {label:"Flue reroute required (kitchen/units)", tags:["flue-reroute","customer-informed"]},
+    {label:"Condensate to be rerouted", tags:["condensate"]},
+    {label:"Terminal clearances to be checked on day", tags:["flue-check"]}
+  ],
+  "Components that require assistance":[
+    {label:"Cylinder lift / removal", tags:["assist-lift"]},
+    {label:"Boiler in loft", tags:["assist-loft"]},
+    {label:"External flue work (height)", tags:["assist-height"]},
+    {label:"Gas run / upsizing", tags:["assist-gas"]}
+  ],
+  "Restrictions to work":[
+    {label:"Limited access / furniture", tags:["cust-move"]},
+    {label:"Customer working from home", tags:[]},
+    {label:"Time restricted visit", tags:[]},
+    {label:"Vulnerable / children / pets on site", tags:[]}
+  ],
+  "Delivery notes":[
+    {label:"Standard delivery OK", tags:[]},
+    {label:"Tight access - advise team", tags:["tight-access"]},
+    {label:"Customer to clear route before install", tags:["cust-move"]}
+  ],
+  "Office notes":[
+    {label:"Electrical / 16A for cylinder required", tags:["elec-16a"]},
+    {label:"Permit / parking / hospital", tags:["permit"]},
+    {label:"Quote variation / ASP to follow", tags:["asp"]}
+  ],
+  "New boiler and controls":[
+    {label:"Combi with smart control", tags:["new-combi"]},
+    {label:"System with unvented cylinder", tags:["new-unvented"]},
+    {label:"Regular + vented (open vent)", tags:["new-vented"]},
+    {label:"Keep existing controls", tags:["keep-controls"]},
+    {label:"Upgrade to load/compensating control", tags:["controls-upgrade"]}
+  ],
+  "Pipe work":[
+    {label:"Minor reroute in same area", tags:[]},
+    {label:"Major reroute / across rooms", tags:["pipe-major"]},
+    {label:"Condensate reroute / soakaway", tags:["condensate"]},
+    {label:"Gas run / upsizing to boiler", tags:["assist-gas"]}
+  ],
+  "Disruption":[
+    {label:"Minimal – same location", tags:[]},
+    {label:"Moderate – cupboards / boxing to be removed", tags:["cust-informed-disruption"]},
+    {label:"High – kitchen/bathroom affected", tags:["cust-informed-disruption","make-good"]}
+  ],
+  "Customer actions":[
+    {label:"Customer accepted Powerflush & filter", tags:["pf-accepted"]},
+    {label:"Customer declined Powerflush", tags:["pf-declined"]},
+    {label:"Customer declined filter", tags:["filter-declined"]},
+    {label:"Customer advised risks of sealing old system", tags:["seal-risk"]},
+    {label:"Customer advised existing showers may reduce on combi", tags:["shower-warning"]},
+    {label:"Customer will make good decor/tiles", tags:["customer-making-good"]}
+  ]
 };
 
-let selections = {};
-const tilesDiv = document.getElementById('tiles');
-const modal = document.getElementById('modal');
-const modalTitle = document.getElementById('modalTitle');
-const modalOptions = document.getElementById('modalOptions');
-const summaryBox = document.getElementById('summaryBox');
+// map tags to auto arse covers
+const autoCovers = {
+  "pf-declined":"Customer declined Powerflush despite recommendation; system may contain sludge affecting performance.",
+  "filter-declined":"Customer declined magnetic filter; advise on future debris/scale issues.",
+  "seal-risk":"Customer informed of risks when sealing an older open-vented system (possible leaks on weak points).",
+  "shower-warning":"Customer made aware that changing to combi / sealed may alter shower performance/flow.",
+  "make-good":"Making good to be by customer unless otherwise stated.",
+  "condensate":"Condensate route to be agreed on day; may require external run/soakaway.",
+  "flue-reroute":"Flue path altered from original; customer informed of visual/penetration changes.",
+  "tight-access":"Advise install team: tight access for kit and cylinder removal.",
+  "cust-move":"Customer to clear access/area prior to visit.",
+  "elec-16a":"16A electrical supply required for cylinder/control — office to arrange/confirm.",
+  "asp":"ASP/variation to be raised prior to install.",
+  "assist-gas":"Gas run/upsizing to be allowed for.",
+  "pipe-major":"Pipework reroute more than local — allow extra time.",
+  "wah-tower":"Tower/scaffold required — allow.",
+  "wah-bridge":"Bridging tower required — allow.",
+  "wah-int-scaf":"Internal scaffold required — allow."
+};
 
-Object.keys(sections).forEach(sec=>{
+let selections = {};        // {section: optionObject}
+const tilesDiv     = document.getElementById('tiles');
+const modal        = document.getElementById('modal');
+const modalTitle   = document.getElementById('modalTitle');
+const modalOptions = document.getElementById('modalOptions');
+const engineerText = document.getElementById('engineerText');
+const customerText = document.getElementById('customerText');
+
+// build tiles
+const sectionOrder = Object.keys(sections);
+
+sectionOrder.forEach(sec=>{
   const t=document.createElement('div');
   t.className='tile';
   t.textContent=sec;
@@ -108,36 +237,73 @@ function openModal(section){
   sections[section].forEach(opt=>{
     const o=document.createElement('div');
     o.className='option';
-    o.textContent=opt;
+    o.textContent=opt.label;
+    if(selections[section] && selections[section].label===opt.label){
+      o.classList.add('selected');
+    }
     o.onclick=()=>selectOption(section,opt);
     modalOptions.appendChild(o);
   });
   modal.style.display='flex';
 }
 
-function selectOption(section,option){
-  selections[section]=option;
+// click outside to close
+modal.addEventListener('click',e=>{
+  if(e.target===modal) modal.style.display='none';
+});
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape' && modal.style.display==='flex'){
+    modal.style.display='none';
+  }
+});
+
+function selectOption(section,opt){
+  selections[section]=opt;
+
   modal.style.display='none';
   document.querySelectorAll('.tile').forEach(t=>{
     if(t.textContent===section) t.classList.add('selected');
   });
-  updateSummary();
+  generateSummaries();
 }
 
-function updateSummary(){
-  let lines=[];
-  for(let [sec,opt] of Object.entries(selections)){
-    lines.push(`${sec}: ${opt}`);
+function generateSummaries(){
+  const coverSet = new Set();
+  // engineer notes
+  let engLines=[];
+  sectionOrder.forEach(sec=>{
+    const opt = selections[sec];
+    if(!opt) return;
+    engLines.push(`${sec}: ${opt.label}`);
+    if(opt.tags && opt.tags.length){
+      opt.tags.forEach(tag=>{
+        if(autoCovers[tag]) coverSet.add(autoCovers[tag]);
+      });
+    }
+  });
+  // auto covers as separate area
+  if(coverSet.size){
+    engLines.push("");
+    engLines.push("Auto notes:");
+    coverSet.forEach(c=>engLines.push("• "+c));
   }
-  summaryBox.textContent = lines.length ? lines.join('\n') : "Start selecting notes to build your summary…";
-}
+  engineerText.textContent = engLines.length ? engLines.join("\n") : "Start selecting notes…";
 
-function generateSummary(){
-  let s="Job summary:\n";
-  for(let [sec,opt] of Object.entries(selections)){
-    s+=`- ${opt} (${sec.toLowerCase()})\n`;
-  }
-  summaryBox.textContent=s.trim();
+  // customer acknowledgements: pull out just the ones that are customer-facing
+  const customerFacing = [
+    "Customer declined Powerflush despite recommendation; system may contain sludge affecting performance.",
+    "Customer declined magnetic filter; advise on future debris/scale issues.",
+    "Customer informed of risks when sealing an older open-vented system (possible leaks on weak points).",
+    "Customer made aware that changing to combi / sealed may alter shower performance/flow.",
+    "Making good to be by customer unless otherwise stated.",
+    "Customer to clear access/area prior to visit."
+  ];
+  let custLines=[];
+  coverSet.forEach(c=>{
+    if(customerFacing.includes(c)) custLines.push("• "+c);
+  });
+  customerText.textContent = custLines.length ? custLines.join("\n") : "Customer info will appear here…";
 }
 </script>
 </body>
