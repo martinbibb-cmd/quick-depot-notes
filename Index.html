@@ -35,14 +35,22 @@ main { display:flex; flex-direction:column; align-items:center; padding:1rem; }
 }
 #modalContent {
   background:var(--card); border-radius:14px; width:90%; max-width:400px;
-  padding:1rem;
+  padding:1rem; position:relative;
 }
-#modalContent h2 { margin-top:0; }
+#modalContent h2 { margin:0 0 .5rem; }
+.close-btn {
+  position:absolute; top:10px; right:10px; border:none; background:transparent;
+  font-size:1.2rem; cursor:pointer; color:var(--fg);
+}
+.close-btn:hover { color:var(--accent); }
 .option {
   border:1px solid var(--border); border-radius:10px; padding:.6rem;
   margin:.4rem 0; cursor:pointer; text-align:center;
 }
 .option:hover { background:#f1f5f9; }
+.option.selected {
+  background:#e0f2fe; border-color:var(--accent);
+}
 #summaryBox {
   background:var(--card); border:1px solid var(--border);
   border-radius:12px; padding:1rem; width:100%; max-width:700px;
@@ -53,6 +61,13 @@ button {
   padding:.8rem 1.2rem; font-size:1rem; cursor:pointer; margin-top:1rem;
 }
 button:hover { opacity:.9; }
+button.secondary {
+  background:white; color:var(--accent); border:1px solid var(--accent);
+  margin-left:.6rem;
+}
+button.secondary:hover {
+  background:#e0f2fe;
+}
 </style>
 </head>
 <body>
@@ -60,11 +75,15 @@ button:hover { opacity:.9; }
 <main>
   <div class="grid" id="tiles"></div>
   <div id="summaryBox">Start selecting notes to build your summary…</div>
-  <button onclick="generateSummary()">Generate Summary</button>
+  <div>
+    <button onclick="generateSummary()">Generate Summary</button>
+    <button class="secondary" onclick="clearSelections()">Clear Selections</button>
+  </div>
 </main>
 
 <div id="modal">
   <div id="modalContent">
+    <button class="close-btn" aria-label="Close" onclick="closeModal()">×</button>
     <h2 id="modalTitle"></h2>
     <div id="modalOptions"></div>
   </div>
@@ -87,14 +106,16 @@ const sections = {
   "Customer actions":["Customer informed about making good","Customer aware of downtime","Customer supplied fittings"]
 };
 
+const sectionOrder = Object.keys(sections);
 let selections = {};
 const tilesDiv = document.getElementById('tiles');
 const modal = document.getElementById('modal');
 const modalTitle = document.getElementById('modalTitle');
 const modalOptions = document.getElementById('modalOptions');
 const summaryBox = document.getElementById('summaryBox');
+let activeSection = null;
 
-Object.keys(sections).forEach(sec=>{
+sectionOrder.forEach(sec=>{
   const t=document.createElement('div');
   t.className='tile';
   t.textContent=sec;
@@ -103,42 +124,104 @@ Object.keys(sections).forEach(sec=>{
 });
 
 function openModal(section){
+  activeSection = section;
   modalTitle.textContent=section;
   modalOptions.innerHTML='';
   sections[section].forEach(opt=>{
     const o=document.createElement('div');
     o.className='option';
     o.textContent=opt;
-    o.onclick=()=>selectOption(section,opt);
+    if((selections[section] || []).includes(opt)){
+      o.classList.add('selected');
+    }
+    o.onclick=()=>toggleOption(section,opt,o);
     modalOptions.appendChild(o);
   });
   modal.style.display='flex';
 }
 
-function selectOption(section,option){
-  selections[section]=option;
+function closeModal(){
   modal.style.display='none';
-  document.querySelectorAll('.tile').forEach(t=>{
-    if(t.textContent===section) t.classList.add('selected');
-  });
+  activeSection = null;
+}
+
+function toggleOption(section,option,element){
+  const current = selections[section] || [];
+  const exists = current.includes(option);
+  let updated;
+  if(exists){
+    updated = current.filter(item=>item!==option);
+    element.classList.remove('selected');
+  } else {
+    updated = [...current, option];
+    element.classList.add('selected');
+  }
+  if(updated.length){
+    selections[section] = updated;
+  } else {
+    delete selections[section];
+  }
+  updateTileState(section);
   updateSummary();
+}
+
+function updateTileState(section){
+  document.querySelectorAll('.tile').forEach(t=>{
+    if(t.textContent===section){
+      if(selections[section] && selections[section].length){
+        t.classList.add('selected');
+      } else {
+        t.classList.remove('selected');
+      }
+    }
+  });
 }
 
 function updateSummary(){
   let lines=[];
-  for(let [sec,opt] of Object.entries(selections)){
-    lines.push(`${sec}: ${opt}`);
-  }
+  sectionOrder.forEach(sec=>{
+    if(selections[sec] && selections[sec].length){
+      const opts = selections[sec].join(', ');
+      lines.push(`${sec}: ${opts}`);
+    }
+  });
   summaryBox.textContent = lines.length ? lines.join('\n') : "Start selecting notes to build your summary…";
 }
 
 function generateSummary(){
   let s="Job summary:\n";
-  for(let [sec,opt] of Object.entries(selections)){
-    s+=`- ${opt} (${sec.toLowerCase()})\n`;
-  }
+  sectionOrder.forEach(sec=>{
+    if(selections[sec] && selections[sec].length){
+      selections[sec].forEach(opt=>{
+        s+=`- ${opt} (${sec.toLowerCase()})\n`;
+      });
+    }
+  });
   summaryBox.textContent=s.trim();
 }
+
+function clearSelections(){
+  selections={};
+  document.querySelectorAll('.tile').forEach(t=>t.classList.remove('selected'));
+  updateSummary();
+  if(activeSection){
+    openModal(activeSection);
+  }
+}
+
+modal.addEventListener('click', (event)=>{
+  if(event.target===modal){
+    closeModal();
+  }
+});
+
+document.addEventListener('keydown', (event)=>{
+  if(event.key==='Escape' && modal.style.display==='flex'){
+    closeModal();
+  }
+});
+
+updateSummary();
 </script>
 </body>
 </html>
